@@ -1,18 +1,40 @@
-//------------------------------------------------------------------------------
-// <copyright file="BodyBasics.cpp" company="Microsoft">
-//     Copyright (c) Microsoft Corporation.  All rights reserved.
-// </copyright>
-//------------------------------------------------------------------------------
+
 
 #include "stdafx.h"
 #include <strsafe.h>
 #include "resource.h"
 #include "BodyBasics.h"
+#include <winsock2.h>
+#include <stdio.h>
+#include <iostream>
+#include <string>
+#include <math.h>       /* atan */
+
+
+
+using namespace std;
+	
+#define PI 3.14159265
+#define SERVER "127.0.0.1"  //ip address of udp server
+///#define SERVER "128.61.126.213"  //ip address of udp server
+
+#define BUFLEN 512  //Max length of buffer
+#define PORT 8888   //The port on which to listen for incoming data
+
+struct sockaddr_in si_other;
+int s, slen = sizeof(si_other);
+char buf[BUFLEN];
+char message[BUFLEN];
+WSADATA wsa;
+
+
 
 static const float c_JointThickness = 3.0f;
 static const float c_TrackedBoneThickness = 6.0f;
 static const float c_InferredBoneThickness = 1.0f;
 static const float c_HandSize = 30.0f;
+float angle = 0;
+int currentState = 0;
 
 /// <summary>
 /// Entry point for the application
@@ -29,11 +51,36 @@ int APIENTRY wWinMain(
     _In_ int nShowCmd
 )
 {
+	//Initialise winsock
+	printf("\nInitialising Winsock...");
+	if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
+	{
+		printf("Failed. Error Code : %d", WSAGetLastError());
+		exit(EXIT_FAILURE);
+	}
+	printf("Initialised.\n");
+
+	//create socket
+	if ((s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == SOCKET_ERROR)
+	{
+		printf("socket() failed with error code : %d", WSAGetLastError());
+		exit(EXIT_FAILURE);
+	}
+
+	//setup address structure
+	memset((char *)&si_other, 0, sizeof(si_other));
+	si_other.sin_family = AF_INET;
+	si_other.sin_port = htons(PORT);
+	si_other.sin_addr.S_un.S_addr = inet_addr(SERVER);
+
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
 
     CBodyBasics application;
     application.Run(hInstance, nShowCmd);
+
+	closesocket(s);
+	WSACleanup();
 }
 
 /// <summary>
@@ -555,21 +602,83 @@ void CBodyBasics::DrawBody(const Joint* pJoints, const D2D1_POINT_2F* pJointPoin
     DrawBone(pJoints, pJointPoints, JointType_HipLeft, JointType_KneeLeft);
     DrawBone(pJoints, pJointPoints, JointType_KneeLeft, JointType_AnkleLeft);
     DrawBone(pJoints, pJointPoints, JointType_AnkleLeft, JointType_FootLeft);
-
     // Draw the joints
-    for (int i = 0; i < JointType_Count; ++i)
-    {
-        D2D1_ELLIPSE ellipse = D2D1::Ellipse(pJointPoints[i], c_JointThickness, c_JointThickness);
+	for (int i = 0; i < JointType_Count; ++i)
+	{
+		D2D1_ELLIPSE ellipse = D2D1::Ellipse(pJointPoints[i], c_JointThickness, c_JointThickness);
 
-        if (pJoints[i].TrackingState == TrackingState_Inferred)
-        {
-            m_pRenderTarget->FillEllipse(ellipse, m_pBrushJointInferred);
-        }
-        else if (pJoints[i].TrackingState == TrackingState_Tracked)
-        {
-            m_pRenderTarget->FillEllipse(ellipse, m_pBrushJointTracked);
-        }
-    }
+		if (pJoints[i].TrackingState == TrackingState_Inferred)
+		{
+			m_pRenderTarget->FillEllipse(ellipse, m_pBrushJointInferred);
+		}
+		else if (pJoints[i].TrackingState == TrackingState_Tracked)
+		{
+			m_pRenderTarget->FillEllipse(ellipse, m_pBrushJointTracked);
+		}
+	}
+	
+	
+	double rightHandX = pJoints[JointType_HandRight].Position.X;
+	double rightHandY = pJoints[JointType_HandRight].Position.Y;
+	double rightHandZ = pJoints[JointType_HandRight].Position.Z;
+
+	double rightShoulderX= pJoints[JointType_ShoulderRight].Position.X;
+	double rightShoulderY = pJoints[JointType_ShoulderRight].Position.Y;
+	double rightShoulderZ = pJoints[JointType_ShoulderRight].Position.Z;
+	
+	angle = atan2((rightHandY - rightShoulderY) ,(rightHandX - rightShoulderX));
+
+	//string tmp = to_string(rightHandZ);
+	//strcpy(message, tmp.c_str());
+
+	/////////////////////////////////////////////////////////////////////////////////////////////
+	//send the angle over UDP
+	//if (sendto(s, message, strlen(message), 0, (struct sockaddr *) &si_other, slen) == SOCKET_ERROR)
+	//{
+	//	printf("sendto() failed with error code : %d", WSAGetLastError());
+	//	exit(EXIT_FAILURE);
+	//}
+
+
+	if (angle > -PI&&angle <= -57 * PI / 96.0 && currentState != 1)
+	{
+		currentState = 1;
+		string tmp = to_string(1);
+		strcpy(message, tmp.c_str());
+		if (sendto(s, message, strlen(message), 0, (struct sockaddr *) &si_other, slen) == SOCKET_ERROR)
+		{
+			printf("sendto() failed with error code : %d", WSAGetLastError());
+			exit(EXIT_FAILURE);
+		}
+	}
+	if (angle>-57*PI / 96.0 && angle < - PI / 3 && currentState != 2)
+	{
+		currentState = 2;
+		string tmp = to_string(2);
+		strcpy(message, tmp.c_str());
+		if (sendto(s, message, strlen(message), 0, (struct sockaddr *) &si_other, slen) == SOCKET_ERROR)
+		{
+			printf("sendto() failed with error code : %d", WSAGetLastError());
+			exit(EXIT_FAILURE);
+		}
+	}
+	if (angle > -1 * PI / 3 && angle < 0 && currentState != 3)
+	{
+		currentState = 3;
+		string tmp = to_string(3);
+		strcpy(message, tmp.c_str());
+		if (sendto(s, message, strlen(message), 0, (struct sockaddr *) &si_other, slen) == SOCKET_ERROR)
+		{
+			printf("sendto() failed with error code : %d", WSAGetLastError());
+			exit(EXIT_FAILURE);
+		}
+	}
+
+
+
+
+	
+
 }
 
 /// <summary>
