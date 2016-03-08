@@ -1,2 +1,5 @@
-﻿  BodyBasics.cpp
+﻿  Source.cpp
+  BodyBasics.cpp
+  Generating Code...
+  LINK : L:\Roozbeh\GitHub\Kinect\Debug\BodyBasics-D2D.exe not found or not built by the last incremental link; performing full link
   BodyBasics-D2D.vcxproj -> L:\Roozbeh\GitHub\Kinect\Debug\BodyBasics-D2D.exe
